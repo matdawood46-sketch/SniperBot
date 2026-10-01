@@ -37,7 +37,8 @@ client = Client(HOST, PORT, CLIENT_ID, CLIENT_SECRET)
 XAUUSD_SYMBOL_ID = None
 
 def on_connected(client):
-    print("✅ Cloud Bot Connected! Authenticating App...")
+    logging.info("✅ Cloud Bot Connected! Authenticating App...")
+    bot_state["connection_status"] = "AUTHENTICATING APP..."
     req = ProtoOAuthClientAppAuthentication()
     req.clientId = CLIENT_ID
     req.clientSecret = CLIENT_SECRET
@@ -46,10 +47,10 @@ def on_connected(client):
 def on_message_received(client, message):
     global XAUUSD_SYMBOL_ID
     msg_name = message.__class__.__name__
-    print(f"📡 Received: {msg_name}")
+    logging.info(f"📡 Received: {msg_name}")
     
     if msg_name == "ProtoOaClientAppAuthRes":
-        print("✅ App Authenticated! Authorizing Trading Account...")
+        logging.info("✅ App Authenticated! Authorizing Trading Account...")
         req = ProtoOAAccountAuthReq()
         req.clientId = CLIENT_ID
         req.accessToken = ACCESS_TOKEN
@@ -57,11 +58,9 @@ def on_message_received(client, message):
         client.send(req)
         
     elif msg_name == "ProtoOAAccountAuthRes":
-        print("✅ Account Authorized! Cloud Bot is LIVE.")
+        logging.info("✅ Account Authorized! Cloud Bot is LIVE.")
         bot_state["connection_status"] = "🟢 LIVE CONNECTED"
-        # Start the background data polling thread
         threading.Thread(target=data_refresh_loop, daemon=True).start()
-        # Fetch symbols
         req_sym = ProtoOASymbolsListReq()
         req_sym.accountId = ACCOUNT_ID
         client.send(req_sym)
@@ -70,7 +69,7 @@ def on_message_received(client, message):
         for symbol in message.symbols:
             if "XAUUSD" in symbol.name:
                 XAUUSD_SYMBOL_ID = symbol.symbolId
-                print(f"✅ Found XAUUSD Symbol ID: {XAUUSD_SYMBOL_ID}")
+                logging.info(f"✅ Found XAUUSD Symbol ID: {XAUUSD_SYMBOL_ID}")
                 
     elif msg_name == "ProtoOATraderRes":
         bal = message.balance / 100.0
@@ -86,36 +85,32 @@ def on_message_received(client, message):
         bot_state["open_trades"] = str(len(message.position))
         
     elif msg_name == "ProtoOANewOrderRes":
-        print("🔥 LIVE TRADE EXECUTED SUCCESSFULLY! 🔥")
+        logging.info("🔥 LIVE TRADE EXECUTED SUCCESSFULLY! 🔥")
         bot_state["last_trade"] = f"✅ {datetime.now(MYT).strftime('%H:%M:%S')} - LIVE BUY order executed successfully!"
 
 def on_disconnected(client, reason):
-    print(f"❌ Disconnected: {reason}")
+    logging.error(f"❌ Disconnected: {reason}")
     bot_state["connection_status"] = f"❌ DISCONNECTED: {reason}"
 
-# Background loop to fetch live Balance, Equity, and Positions
 def data_refresh_loop():
     while True:
         try:
-            # Request Balance & Equity
             req = ProtoOATraderReq()
             req.accountId = ACCOUNT_ID
             client.send(req)
             
-            # Request Open Positions
             req_pos = ProtoOAPositionListReq()
             req_pos.accountId = ACCOUNT_ID
             req_pos.ctidTraderAccountId = ACCOUNT_ID
             client.send(req_pos)
         except Exception as e:
-            print("Polling error:", e)
+            logging.error(f"Polling error: {e}")
         time.sleep(15)
 
 client.setConnectedCallback(on_connected)
 client.setMessageReceivedCallback(on_message_received)
 client.setDisconnectedCallback(on_disconnected)
 
-# --- MOBILE DASHBOARD UI ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
@@ -176,29 +171,29 @@ def dashboard():
 def execute_live_trade():
     global XAUUSD_SYMBOL_ID
     if XAUUSD_SYMBOL_ID:
-        print(f"⚡ Firing Live Order for XAUUSD (ID: {XAUUSD_SYMBOL_ID})...")
+        logging.info(f"⚡ Firing Live Order for XAUUSD (ID: {XAUUSD_SYMBOL_ID})...")
         req = ProtoOANewOrderReq()
         req.accountId = ACCOUNT_ID
         req.symbolId = XAUUSD_SYMBOL_ID
-        req.orderType = 1 # MARKET ORDER
-        req.tradeSide = 1 # BUY
-        req.volume = 1000 # 0.01 lots (1000 units)
+        req.orderType = 1
+        req.tradeSide = 1
+        req.volume = 1000
         client.send(req)
     else:
-        print("Cannot execute trade: XAUUSD Symbol ID not found yet.")
+        logging.error("Cannot execute trade: XAUUSD Symbol ID not found yet.")
     return redirect('/')
 
-# --- TWISTED + FLASK CLOUD RUNNER ---
 def start_reactor():
-    # Crucial Fix: Start the cTrader service when the reactor is ready
-    reactor.callWhenRunning(client.startService)
+    logging.info("Twisted reactor thread started.")
+    try:
+        logging.info("Attempting to start cTrader service...")
+        client.startService()
+    except Exception as e:
+        logging.error(f"Failed to start cTrader service: {e}")
     reactor.run(installSignalHandlers=0)
 
 if __name__ == "__main__":
-    # Start the cTrader TCP connection in a background thread
     threading.Thread(target=start_reactor, daemon=True).start()
-    
-    # Start the Flask Web Server in the main thread
     port = int(os.environ.get("PORT", 5000))
-    print(f"📱 Live Dashboard starting on port {port}...")
+    logging.info(f"📱 Live Dashboard starting on port {port}...")
     app.run(host="0.0.0.0", port=port)
