@@ -2,6 +2,7 @@ import os
 import threading
 import logging
 import time
+import socket
 from twisted.internet import reactor
 from flask import Flask, render_template_string, redirect, request
 from ctrader_open_api import Client
@@ -24,7 +25,7 @@ logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
 
 bot_state = {
-    "connection_status": "🔴 CONNECTING...",
+    "connection_status": "🔴 TESTING RENDER NETWORK...",
     "balance": "$0",
     "equity": "$0",
     "floating_pl": "$0.00",
@@ -183,8 +184,23 @@ def execute_live_trade():
         logging.error("Cannot execute trade: XAUUSD Symbol ID not found yet.")
     return redirect('/')
 
+# NETWORK TEST FUNCTION
+def test_render_network():
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(10)
+        sock.connect((HOST, PORT))
+        logging.info("✅ RENDER NETWORK TEST: Port 5034 is OPEN!")
+        sock.close()
+    except Exception as e:
+        logging.error(f"❌ RENDER NETWORK TEST: Port 5034 is BLOCKED! Error: {e}")
+
 def start_reactor():
     logging.info("Twisted reactor thread started.")
+    
+    # RUN THE NETWORK TEST BEFORE STARTING
+    test_render_network()
+    
     try:
         logging.info("Attempting to start cTrader service...")
         client.startService()
