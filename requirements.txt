@@ -1,0 +1,10 @@
+Flask
+yfinance
+pandas
+ta
+pytz
+requests
+ctrader-open-api==0.8.1
+Twisted
+service_identity
+pyopenssl
