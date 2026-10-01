@@ -1,1 +1,0 @@
-web: python mobile_bot_v4.py
